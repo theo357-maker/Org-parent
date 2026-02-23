@@ -1,8 +1,9 @@
 // ============================================
 // SERVICE WORKER POUR NOTIFICATIONS FIREBASE
-// VERSION CORRIGÉE - NOTIFICATIONS ARRIÈRE-PLAN
+// VERSION FINALE - FONCTIONNELLE EN ARRIÈRE-PLAN
 // ============================================
 
+// Importer Firebase
 importScripts('https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.22.1/firebase-messaging-compat.js');
 
@@ -18,15 +19,17 @@ const firebaseConfig = {
 
 // Initialiser Firebase
 firebase.initializeApp(firebaseConfig);
+
+// Initialiser Messaging
 const messaging = firebase.messaging();
 
 // ============================================
 // GESTION DES NOTIFICATIONS EN ARRIÈRE-PLAN
 // ============================================
 
-// Recevoir les notifications quand l'app est fermée
-messaging.onBackgroundMessage((payload) => {
-  console.log('📱 [SW] Notification reçue en arrière-plan:', payload);
+// Recevoir les notifications quand l'app est en arrière-plan ou fermée
+messaging.onBackgroundMessage(function(payload) {
+  console.log('📱 [Service Worker] Notification reçue en arrière-plan:', payload);
   
   // Extraire les données
   const notificationTitle = payload.notification?.title || 
@@ -39,37 +42,23 @@ messaging.onBackgroundMessage((payload) => {
   
   const data = payload.data || {};
   
-  // Déterminer l'icône selon le type
+  // Déterminer l'icône (utiliser votre logo)
   let icon = '/icon-192x192.png';
   let badge = '/icon-72x72.png';
-  
-  // Ajouter le logo de l'application
-  if (data.type === 'incident') {
-    icon = '/icon-192x192.png';
-  } else if (data.type === 'notes') {
-    icon = '/icon-192x192.png';
-  } else if (data.type === 'presence') {
-    icon = '/icon-192x192.png';
-  } else if (data.type === 'devoir') {
-    icon = '/icon-192x192.png';
-  } else if (data.type === 'communique') {
-    icon = '/icon-192x192.png';
-  }
   
   // Options de la notification
   const notificationOptions = {
     body: notificationBody,
     icon: icon,
     badge: badge,
-    tag: data.id || data.type || 'general',
+    tag: data.id || data.type || 'notification',
     data: {
       ...data,
-      timestamp: new Date().toISOString(),
-      receivedAt: Date.now()
+      timestamp: new Date().toISOString()
     },
-    requireInteraction: true,
+    requireInteraction: true, // Reste jusqu'à ce que l'utilisateur interagisse
     silent: false,
-    vibrate: [200, 100, 200],
+    vibrate: [200, 100, 200], // Vibration pour mobile
     actions: [
       {
         action: 'open',
@@ -90,8 +79,8 @@ messaging.onBackgroundMessage((payload) => {
 // GESTION DES CLIKS SUR LES NOTIFICATIONS
 // ============================================
 
-self.addEventListener('notificationclick', (event) => {
-  console.log('🔔 [SW] Notification cliquée:', event.notification);
+self.addEventListener('notificationclick', function(event) {
+  console.log('🔔 [Service Worker] Notification cliquée:', event.notification);
   
   const notification = event.notification;
   const action = event.action;
@@ -103,9 +92,10 @@ self.addEventListener('notificationclick', (event) => {
   if (action === 'open' || action === '') {
     event.waitUntil(
       clients.matchAll({ type: 'window', includeUncontrolled: true })
-        .then((clientList) => {
+        .then(function(clientList) {
           // Si une fenêtre est déjà ouverte, la focus
-          for (const client of clientList) {
+          for (let i = 0; i < clientList.length; i++) {
+            const client = clientList[i];
             if (client.url.includes('index.html') && 'focus' in client) {
               // Envoyer un message pour naviguer vers la page spécifique
               client.postMessage({
@@ -136,8 +126,8 @@ self.addEventListener('notificationclick', (event) => {
 // GESTION DES MESSAGES DE L'APPLICATION
 // ============================================
 
-self.addEventListener('message', (event) => {
-  console.log('📨 [SW] Message reçu:', event.data);
+self.addEventListener('message', function(event) {
+  console.log('📨 [Service Worker] Message reçu:', event.data);
   
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     // Afficher une notification directement
@@ -148,10 +138,7 @@ self.addEventListener('message', (event) => {
       icon: data.icon || '/icon-192x192.png',
       badge: data.badge || '/icon-72x72.png',
       tag: data.tag || data.id || 'notification',
-      data: {
-        ...data,
-        receivedAt: Date.now()
-      },
+      data: data,
       requireInteraction: true,
       vibrate: [200, 100, 200]
     });
@@ -174,7 +161,7 @@ self.addEventListener('message', (event) => {
 // MISE EN CACHE POUR OFFLINE
 // ============================================
 
-const CACHE_NAME = 'parent-app-v4';
+const CACHE_NAME = 'parent-app-v5';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -190,40 +177,40 @@ const urlsToCache = [
   '/icon-512x512.png'
 ];
 
-self.addEventListener('install', (event) => {
-  console.log('🔄 [SW] Installation...');
+self.addEventListener('install', function(event) {
+  console.log('🔄 [Service Worker] Installation...');
   self.skipWaiting(); // Activer immédiatement
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('📦 [SW] Mise en cache des ressources');
-        return cache.addAll(urlsToCache).catch(error => {
-          console.error('❌ [SW] Erreur cache:', error);
+      .then(function(cache) {
+        console.log('📦 [Service Worker] Mise en cache des ressources');
+        return cache.addAll(urlsToCache).catch(function(error) {
+          console.error('❌ [Service Worker] Erreur cache:', error);
         });
       })
   );
 });
 
-self.addEventListener('activate', (event) => {
-  console.log('✅ [SW] Activé');
+self.addEventListener('activate', function(event) {
+  console.log('✅ [Service Worker] Activé');
   // Nettoyer les anciens caches
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
+    caches.keys().then(function(cacheNames) {
       return Promise.all(
-        cacheNames.map((cacheName) => {
+        cacheNames.map(function(cacheName) {
           if (cacheName !== CACHE_NAME) {
-            console.log('🗑️ [SW] Suppression ancien cache:', cacheName);
+            console.log('🗑️ [Service Worker] Suppression ancien cache:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
-    }).then(() => {
+    }).then(function() {
       return clients.claim(); // Prendre le contrôle immédiatement
     })
   );
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', function(event) {
   // Ne pas intercepter les requêtes Firebase ou autres API
   if (event.request.url.includes('firebase') || 
       event.request.url.includes('googleapis') ||
@@ -233,19 +220,19 @@ self.addEventListener('fetch', (event) => {
   
   event.respondWith(
     fetch(event.request)
-      .then(response => {
+      .then(function(response) {
         // Mettre en cache les réponses réussies
         if (response.status === 200 && event.request.method === 'GET') {
           const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
+          caches.open(CACHE_NAME).then(function(cache) {
             cache.put(event.request, responseClone);
           });
         }
         return response;
       })
-      .catch(() => {
+      .catch(function() {
         // En cas d'échec, essayer le cache
-        return caches.match(event.request).then(cachedResponse => {
+        return caches.match(event.request).then(function(cachedResponse) {
           if (cachedResponse) {
             return cachedResponse;
           }
@@ -265,39 +252,32 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ============================================
-// GESTION DE LA SYNC EN ARRIÈRE-PLAN
+// GESTION DU PUSH (POUR COMPATIBILITÉ)
 // ============================================
 
-self.addEventListener('sync', (event) => {
-  console.log('🔄 [SW] Sync event:', event.tag);
+self.addEventListener('push', function(event) {
+  console.log('📨 [Service Worker] Push reçu:', event);
   
-  if (event.tag === 'sync-notifications') {
-    event.waitUntil(
-      // Synchroniser les notifications non lues
-      syncNotifications()
-    );
-  }
-});
-
-async function syncNotifications() {
+  let data = {};
   try {
-    const cache = await caches.open(CACHE_NAME);
-    const response = await fetch('/api/notifications');
-    if (response.ok) {
-      const notifications = await response.json();
-      // Traiter les nouvelles notifications
-      notifications.forEach(notif => {
-        self.registration.showNotification(notif.title, {
-          body: notif.body,
-          icon: '/icon-192x192.png',
-          badge: '/icon-72x72.png',
-          tag: notif.id,
-          data: notif,
-          requireInteraction: true
-        });
-      });
-    }
-  } catch (error) {
-    console.error('❌ [SW] Erreur synchronisation:', error);
+    data = event.data?.json() || {};
+  } catch (e) {
+    data = { 
+      title: 'Nouvelle notification', 
+      body: event.data?.text() || '' 
+    };
   }
-}
+  
+  const options = {
+    body: data.body || 'Nouvelle notification',
+    icon: '/icon-192x192.png',
+    badge: '/icon-72x72.png',
+    data: data,
+    requireInteraction: true,
+    vibrate: [200, 100, 200]
+  };
+  
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Espace Parent', options)
+  );
+});
